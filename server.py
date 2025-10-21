@@ -43,12 +43,24 @@ def get_google_tasks_service():
     logger.info(f"Looking for token at: {TOKEN_FILE}")
     logger.info(f"Current working directory: {os.getcwd()}")
     
-    # Load existing token
-    if os.path.exists(TOKEN_FILE):
+    # Try loading token from environment variable first (for deployment)
+    token_env = os.getenv('GOOGLE_TASKS_TOKEN')
+    if token_env:
+        try:
+            logger.info("Loading token from GOOGLE_TASKS_TOKEN environment variable...")
+            import json
+            token_info = json.loads(token_env)
+            creds = Credentials.from_authorized_user_info(token_info, SCOPES)
+        except Exception as e:
+            logger.error(f"Failed to load token from environment: {e}")
+            creds = None
+    
+    # Fallback to loading from file
+    if not creds and os.path.exists(TOKEN_FILE):
         logger.info("Token file found, loading credentials...")
         creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
-    else:
-        logger.warning(f"Token file not found at: {TOKEN_FILE}")
+    elif not creds:
+        logger.warning(f"Token not found in environment or at: {TOKEN_FILE}")
     
     # If there are no (valid) credentials available, let the user log in
     if not creds or not creds.valid:

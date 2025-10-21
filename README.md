@@ -24,6 +24,7 @@ A comprehensive Model Context Protocol (MCP) server that provides full access to
 - **Environment Detection**: Works in both interactive and non-interactive environments
 - **Comprehensive Error Handling**: Detailed error messages and logging
 
+
 ## Setup
 
 ### 1. Install Dependencies
@@ -172,17 +173,13 @@ Add to your Gemini settings (`.gemini/settings.json`):
     {
       "name": "google-tasks",
       "command": "uv",
-      "args": ["run", "python", "/absolute/path/to/run_server.py"],
+      "args": ["run", "python", "/absolute/path/to/run_server.py"]
     }
   ]
 }
 ```
 
-**Important:** 
-- Replace `/absolute/path/to/` with your actual repository path
-- Use `"command": "uv"` (not `"uv run python"`) - the command must be a single executable
-- The `args` array contains: `["run", "python", "run_server.py"]`
-- Alternatively, use `start_server.sh` as the command (it handles environment setup automatically)
+**Note:** Replace `/absolute/path/to/` with your actual repository path. Alternatively, use `start_server.sh` as the command.
 
 ### Example Commands in Gemini CLI
 
@@ -230,9 +227,6 @@ uv run python test_server.py
 ### Test with Gemini
 
 ```bash
-# Validate configuration
-python3 test_gemini_config.py
-
 # Test server directly
 python3 run_server.py
 ```
@@ -255,11 +249,8 @@ google-tasks-mcp-server/
 ├── main.py                # Entry point
 ├── run_server.py          # Environment wrapper (used by Gemini)
 ├── start_server.sh        # Shell wrapper for MCP clients
-├── .gemini/
-│   └── settings.json      # Gemini CLI and server integration settings
 ├── test_all_tools.py      # Integration test suite
 ├── test_server.py         # Unit tests
-├── test_gemini_config.py  # Gemini configuration validator
 ├── debug_auth.py          # Authentication debugging
 ├── credentials.json       # Google OAuth credentials (user-provided)
 ├── token.json            # Authentication token (auto-generated)

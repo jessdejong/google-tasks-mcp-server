@@ -8,8 +8,7 @@
     {
       "name": "google-tasks",
       "command": "uv",
-      "args": ["run", "python", "/Users/jess/Projects/google-tasks-mcp-server/run_server.py"],
-      "cwd": "/Users/jess/Projects/google-tasks-mcp-server"
+      "args": ["run", "python", "/Users/jess/Projects/google-tasks-mcp-server/run_server.py"]
     }
   ]
 }
