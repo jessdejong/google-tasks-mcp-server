@@ -229,11 +229,16 @@ async def list_tasklists(ctx: Context) -> dict:
     """
     List all available task lists from Google Tasks.
     
+    Use this to discover available task lists before creating or querying tasks.
+    Each user typically has at least one default task list, but may have multiple
+    lists to organize different types of tasks.
+    
     Args:
         ctx: FastMCP context
     
     Returns:
-        Dictionary containing the available task lists
+        Dictionary with 'total_lists' (count) and 'tasklists' (array of list objects).
+        Each tasklist contains: id, title, updated timestamp, and self_link.
     """
     try:
         logger.info("Getting available task lists")
@@ -303,13 +308,34 @@ def _resolve_tasklist_id(service, tasklist_id: str) -> dict:
 async def create_task(
     ctx: Context,
     title: str,
+    due: str,
     tasklist_id: str = "@default",
     notes: Optional[str] = None,
-    due: Optional[str] = None,
     parent: Optional[str] = None,
     position: Optional[str] = None,
 ) -> dict:
-    """Create a new task."""
+    """
+    Create a new task in Google Tasks with a due date.
+    
+    All tasks must have a due date. Google Tasks API only supports due dates, not 
+    specific times. If you need to track a specific time for a task, add it to the 
+    task title or notes field instead (e.g., "Meeting at 3 PM" or add "Time: 3 PM" 
+    in the notes).
+
+    Args:
+        ctx: FastMCP context
+        title: The title/name of the task (required)
+        due: Due date in YYYY-MM-DD format (e.g., "2024-12-31") (required)
+        tasklist_id: ID of the task list to add to (default: "@default" uses first list)
+        notes: Optional description or notes for the task
+        parent: Optional parent task ID to create a subtask
+        position: Optional ID of the task to insert after (for ordering)
+
+    Returns:
+        Dictionary with 'tasklist_id' and 'task' (the created task object)
+    """
+    from datetime import datetime
+    
     try:
         service = get_google_tasks_service()
         if not service:
@@ -319,11 +345,21 @@ async def create_task(
             return {"error": resolved["error"], **resolved}
         tasklist_id = resolved["tasklist_id"]
 
-        body: Dict[str, Any] = {"title": title}
+        # Format due date to RFC 3339 format
+        try:
+            # If it's already in RFC 3339 format (has 'T'), use as is
+            if 'T' in due:
+                due_formatted = due
+            else:
+                # Parse YYYY-MM-DD and convert to RFC 3339 format
+                date_obj = datetime.strptime(due, "%Y-%m-%d")
+                due_formatted = date_obj.strftime("%Y-%m-%dT00:00:00.000Z")
+        except ValueError as e:
+            return {"error": f"Invalid date format. Please use YYYY-MM-DD format (e.g., '2024-12-31'). Error: {str(e)}"}
+
+        body: Dict[str, Any] = {"title": title, "due": due_formatted}
         if notes is not None:
             body["notes"] = notes
-        if due is not None:
-            body["due"] = due
 
         insert_kwargs: Dict[str, Any] = {"tasklist": tasklist_id, "body": body}
         if parent is not None:
@@ -353,7 +389,26 @@ async def update_task(
     parent: Optional[str] = None,
     position: Optional[str] = None,
 ) -> dict:
-    """Update fields on an existing task."""
+    """
+    Update one or more fields of an existing task in Google Tasks.
+    
+    Only the fields you provide will be updated; all other fields remain unchanged.
+    This allows for partial updates without needing to fetch and resend all task data.
+    
+    Args:
+        ctx: FastMCP context
+        task_id: The ID of the task to update (required)
+        tasklist_id: ID of the task list containing the task (default: "@default")
+        title: New title for the task
+        notes: New description/notes for the task
+        due: New due date in RFC 3339 format (e.g., "2024-12-31T23:59:59Z")
+        status: New status - either "needsAction" or "completed"
+        parent: New parent task ID to move this task under (makes it a subtask)
+        position: ID of task to position this task after (for reordering)
+    
+    Returns:
+        Dictionary with 'tasklist_id' and 'task' (the updated task object)
+    """
     try:
         service = get_google_tasks_service()
         if not service:
@@ -403,7 +458,22 @@ async def complete_task(
     tasklist_id: str = "@default",
     completed: bool = True,
 ) -> dict:
-    """Mark a task completed or uncompleted."""
+    """
+    Mark a task as completed or uncompleted (reopen it).
+    
+    This is a convenience function that updates the task's status field.
+    When marking a task as completed, Google Tasks automatically sets the
+    completion timestamp.
+    
+    Args:
+        ctx: FastMCP context
+        task_id: The ID of the task to update (required)
+        tasklist_id: ID of the task list containing the task (default: "@default")
+        completed: True to mark completed, False to mark as needs action (default: True)
+    
+    Returns:
+        Dictionary with 'tasklist_id' and 'task' (the updated task object)
+    """
     try:
         service = get_google_tasks_service()
         if not service:
@@ -432,7 +502,21 @@ async def delete_task(
     task_id: str,
     tasklist_id: str = "@default",
 ) -> dict:
-    """Delete a task."""
+    """
+    Permanently delete a task from Google Tasks.
+    
+    Warning: This action cannot be undone. The task will be permanently removed
+    from the task list. If you want to preserve the task but mark it as done,
+    use complete_task instead.
+    
+    Args:
+        ctx: FastMCP context
+        task_id: The ID of the task to delete (required)
+        tasklist_id: ID of the task list containing the task (default: "@default")
+    
+    Returns:
+        Dictionary with 'tasklist_id', 'deleted' (True), and 'task_id'
+    """
     try:
         service = get_google_tasks_service()
         if not service:
@@ -454,7 +538,20 @@ async def delete_task(
 
 @mcp.tool
 async def create_tasklist(ctx: Context, title: str) -> dict:
-    """Create a new task list."""
+    """
+    Create a new task list in Google Tasks.
+    
+    Task lists are top-level containers for organizing tasks. Users can have
+    multiple task lists to separate different projects, contexts, or categories
+    of tasks (e.g., "Work", "Personal", "Shopping").
+    
+    Args:
+        ctx: FastMCP context
+        title: The name/title for the new task list (required)
+    
+    Returns:
+        Dictionary with 'tasklist' (the created tasklist object including its id)
+    """
     try:
         service = get_google_tasks_service()
         if not service:
@@ -475,7 +572,20 @@ async def get_task(
     task_id: str,
     tasklist_id: str = "@default",
 ) -> dict:
-    """Fetch a single task by id."""
+    """
+    Fetch detailed information about a single task by its ID.
+    
+    Use this when you need to retrieve or refresh the current state of a specific
+    task, including all its properties like title, notes, due date, status, etc.
+    
+    Args:
+        ctx: FastMCP context
+        task_id: The ID of the task to retrieve (required)
+        tasklist_id: ID of the task list containing the task (default: "@default")
+    
+    Returns:
+        Dictionary with 'tasklist_id' and 'task' (the complete task object)
+    """
     try:
         service = get_google_tasks_service()
         if not service:
@@ -505,7 +615,26 @@ async def search_tasks(
     due_after: Optional[str] = None,
     max_results: int = 100,
 ) -> dict:
-    """Search tasks by simple filters (client-side filter over list)."""
+    """
+    Search and filter tasks using various criteria.
+    
+    This function retrieves tasks from the API and applies client-side filtering
+    based on the provided criteria. You can search by text, filter by completion
+    status, and filter by due date ranges.
+    
+    Args:
+        ctx: FastMCP context
+        tasklist_id: ID of the task list to search (default: "@default")
+        query: Text to search for in task titles and notes (case-insensitive)
+        include_completed: Whether to include completed tasks (default: False)
+        include_deleted: Whether to include deleted tasks (default: False)
+        due_before: Only return tasks due before this date (RFC 3339 format)
+        due_after: Only return tasks due after this date (RFC 3339 format)
+        max_results: Maximum number of tasks to retrieve before filtering (default: 100)
+    
+    Returns:
+        Dictionary with 'tasklist_id', 'total' (count of matching tasks), and 'tasks' array
+    """
     try:
         service = get_google_tasks_service()
         if not service:
@@ -552,7 +681,24 @@ async def move_task(
     parent: Optional[str] = None,
     previous: Optional[str] = None,
 ) -> dict:
-    """Move (reorder or reparent) a task."""
+    """
+    Move a task to change its position or parent within a task list.
+    
+    This function allows you to:
+    - Reorder tasks by specifying which task to place this one after
+    - Create subtask relationships by setting a parent task
+    - Move a subtask to become a top-level task by setting parent to null
+    
+    Args:
+        ctx: FastMCP context
+        task_id: The ID of the task to move (required)
+        tasklist_id: ID of the task list containing the task (default: "@default")
+        parent: ID of the parent task to move this under (creates subtask relationship)
+        previous: ID of the task that should come before this task (for ordering)
+    
+    Returns:
+        Dictionary with 'tasklist_id' and 'task' (the moved task object with updated position)
+    """
     try:
         service = get_google_tasks_service()
         if not service:
